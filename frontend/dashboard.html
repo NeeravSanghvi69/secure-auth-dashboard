@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Dashboard</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="card">
+  <h2>Dashboard</h2>
+
+  <button onclick="loadUsers()">Load Users</button>
+  <button id="adminBtn" style="display:none;" onclick="loadAdminPanel()">Admin Panel</button>
+  <button class="logout" onclick="logout()">Logout</button>
+
+  <div id="output"></div>
+</div>
+
+<script>
+const API_BASE = "http://localhost:3000";
+const token = localStorage.getItem("token");
+
+if (!token) {
+  window.location.href = "login.html";
+}
+
+// Decode JWT
+const payload = JSON.parse(atob(token.split(".")[1]));
+
+// Show admin panel only for admin
+if (payload.role === "admin") {
+  document.getElementById("adminBtn").style.display = "block";
+}
+
+// =======================
+// LOAD USERS (NORMAL)
+// =======================
+function loadUsers() {
+  fetch(`${API_BASE}/users`, {
+    headers: { Authorization: "Bearer " + token }
+  })
+  .then(res => res.json())
+  .then(users => {
+    let html = "<h3>Users</h3>";
+    users.forEach(u => {
+      html += `<p>${u.id} - ${u.username}</p>`;
+    });
+    document.getElementById("output").innerHTML = html;
+  });
+}
+
+// =======================
+// ADMIN PANEL
+// =======================
+function loadAdminPanel() {
+  fetch(`${API_BASE}/users`, {
+    headers: { Authorization: "Bearer " + token }
+  })
+  .then(res => res.json())
+  .then(users => {
+    let html = "<h3>Admin Panel</h3>";
+
+    users.forEach(u => {
+      html += `
+        <div style="margin-bottom:12px;">
+          <strong>${u.username}</strong> (ID: ${u.id})
+          <br>
+          <button onclick="promoteUser(${u.id})">Promote</button>
+          <button onclick="deleteUser(${u.id})">Delete</button>
+        </div>
+      `;
+    });
+
+    document.getElementById("output").innerHTML = html;
+  });
+}
+
+// =======================
+// PROMOTE USER
+// =======================
+function promoteUser(id) {
+  fetch(`${API_BASE}/admin/promote/${id}`, {
+    method: "PUT",
+    headers: { Authorization: "Bearer " + token }
+  })
+  .then(res => res.json())
+  .then(data => {
+    alert(data.message);
+    loadAdminPanel();
+  });
+}
+
+// =======================
+// DELETE USER
+// =======================
+function deleteUser(id) {
+  if (!confirm("Are you sure?")) return;
+
+  fetch(`${API_BASE}/admin/users/${id}`, {
+    method: "DELETE",
+    headers: { Authorization: "Bearer " + token }
+  })
+  .then(res => res.json())
+  .then(data => {
+    alert(data.message);
+    loadAdminPanel();
+  });
+}
+
+// =======================
+// LOGOUT
+// =======================
+function logout() {
+  localStorage.removeItem("token");
+  window.location.href = "login.html";
+}
+</script>
+
+</body>
+</html>
