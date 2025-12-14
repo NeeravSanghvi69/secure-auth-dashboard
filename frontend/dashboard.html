@@ -7,7 +7,10 @@
 <body>
 
 <div class="card">
-  <h2>Dashboard</h2>
+  <h2>
+    Dashboard
+    <span id="roleBadge"></span>
+  </h2>
 
   <button onclick="loadUsers()">Load Users</button>
   <button id="adminBtn" style="display:none;" onclick="loadAdminPanel()">Admin Panel</button>
@@ -20,14 +23,19 @@
 const API_BASE = "http://localhost:3000";
 const token = localStorage.getItem("token");
 
-if (!token) {
-  window.location.href = "login.html";
-}
+if (!token) window.location.href = "login.html";
 
-// Decode JWT
+// =======================
+// DECODE JWT
+// =======================
 const payload = JSON.parse(atob(token.split(".")[1]));
+const currentUserId = payload.id;
 
-// Show admin panel only for admin
+// ROLE BADGE
+document.getElementById("roleBadge").innerText =
+  payload.role === "admin" ? " 👑 ADMIN" : " 👤 USER";
+
+// SHOW ADMIN BUTTON
 if (payload.role === "admin") {
   document.getElementById("adminBtn").style.display = "block";
 }
@@ -43,7 +51,7 @@ function loadUsers() {
   .then(users => {
     let html = "<h3>Users</h3>";
     users.forEach(u => {
-      html += `<p>${u.id} - ${u.username}</p>`;
+      html += `<p>${u.id} — ${u.username} (${u.role})</p>`;
     });
     document.getElementById("output").innerHTML = html;
   });
@@ -53,25 +61,82 @@ function loadUsers() {
 // ADMIN PANEL
 // =======================
 function loadAdminPanel() {
-  fetch(`${API_BASE}/users`, {
+  fetch(`${API_BASE}/admin/users`, {
     headers: { Authorization: "Bearer " + token }
   })
   .then(res => res.json())
   .then(users => {
-    let html = "<h3>Admin Panel</h3>";
+    let html = `
+      <h3>Admin Panel</h3>
+
+      <h4>Create User</h4>
+      <input id="newUsername" placeholder="Username"><br><br>
+      <input id="newPassword" placeholder="Password"><br><br>
+      <select id="newRole">
+        <option value="user">User</option>
+        <option value="admin">Admin</option>
+      </select><br><br>
+      <button onclick="createUser()">Create User</button>
+
+      <hr><h4>User Management</h4>
+    `;
 
     users.forEach(u => {
+      const isSelf = u.id === currentUserId;
+
       html += `
-        <div style="margin-bottom:12px;">
-          <strong>${u.username}</strong> (ID: ${u.id})
-          <br>
-          <button onclick="promoteUser(${u.id})">Promote</button>
-          <button onclick="deleteUser(${u.id})">Delete</button>
+        <div style="margin-bottom:14px; padding:10px; border-bottom:1px solid rgba(255,255,255,0.2)">
+          <strong>${u.username}</strong> (${u.role})<br>
+
+          <button 
+            onclick="promoteUser(${u.id})"
+            ${isSelf || u.role === "admin" ? "disabled" : ""}>
+            Promote
+          </button>
+
+          <button 
+            onclick="deleteUser(${u.id})"
+            ${isSelf ? "disabled" : ""}>
+            Delete
+          </button>
         </div>
       `;
     });
 
+    html += `
+      <hr>
+      <button onclick="loadAuditLogs()">View Audit Logs</button>
+    `;
+
     document.getElementById("output").innerHTML = html;
+  });
+}
+
+// =======================
+// CREATE USER
+// =======================
+function createUser() {
+  const username = document.getElementById("newUsername").value;
+  const password = document.getElementById("newPassword").value;
+  const role = document.getElementById("newRole").value;
+
+  if (!username || !password) {
+    alert("All fields required");
+    return;
+  }
+
+  fetch(`${API_BASE}/admin/users`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer " + token
+    },
+    body: JSON.stringify({ username, password, role })
+  })
+  .then(res => res.json())
+  .then(data => {
+    alert(data.message);
+    loadAdminPanel();
   });
 }
 
@@ -79,6 +144,8 @@ function loadAdminPanel() {
 // PROMOTE USER
 // =======================
 function promoteUser(id) {
+  if (!confirm("Promote this user to ADMIN?")) return;
+
   fetch(`${API_BASE}/admin/promote/${id}`, {
     method: "PUT",
     headers: { Authorization: "Bearer " + token }
@@ -91,10 +158,10 @@ function promoteUser(id) {
 }
 
 // =======================
-// DELETE USER
+// DELETE USER (SOFT DELETE)
 // =======================
 function deleteUser(id) {
-  if (!confirm("Are you sure?")) return;
+  if (!confirm("Soft delete this user?")) return;
 
   fetch(`${API_BASE}/admin/users/${id}`, {
     method: "DELETE",
@@ -104,6 +171,30 @@ function deleteUser(id) {
   .then(data => {
     alert(data.message);
     loadAdminPanel();
+  });
+}
+
+// =======================
+// AUDIT LOGS
+// =======================
+function loadAuditLogs() {
+  fetch(`${API_BASE}/admin/audit-logs`, {
+    headers: { Authorization: "Bearer " + token }
+  })
+  .then(res => res.json())
+  .then(logs => {
+    let html = "<h3>Audit Logs</h3>";
+    logs.forEach(l => {
+      html += `
+        <p>
+          <strong>Admin:</strong> ${l.admin_id} |
+          <strong>Action:</strong> ${l.action} |
+          <strong>Target:</strong> ${l.target_user_id || "-"} |
+          <strong>Time:</strong> ${l.created_at}
+        </p>
+      `;
+    });
+    document.getElementById("output").innerHTML = html;
   });
 }
 
